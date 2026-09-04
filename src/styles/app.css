@@ -3,6 +3,25 @@
 @layer base {
   html,
   body {
-    @apply bg-white text-gray-900 antialiased dark:bg-gray-950 dark:text-gray-100;
+    @apply bg-neutral-950 text-neutral-200 antialiased;
+  }
+  ::selection {
+    @apply bg-indigo-500/30;
+  }
+}
+
+/* Restrained high-contrast accents for the dark SaaS UI. */
+@layer components {
+  .card {
+    @apply rounded-2xl border border-neutral-800 bg-neutral-900/40;
+  }
+  .input {
+    @apply w-full rounded-lg border border-neutral-700 bg-neutral-800 px-3 py-2 text-sm text-neutral-100 outline-none focus:border-indigo-500;
+  }
+  .btn-primary {
+    @apply rounded-lg bg-indigo-500 px-4 py-2 text-sm font-semibold text-white hover:bg-indigo-400 disabled:opacity-60;
+  }
+  .label {
+    @apply mb-1 block text-sm font-medium text-neutral-300;
   }
 }

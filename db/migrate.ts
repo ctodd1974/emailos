@@ -35,13 +35,22 @@ function splitStatements(sql: string): string[] {
     const next = sql[i + 1];
 
     if (inLineComment) {
-      if (ch === "\n") inLineComment = false;
+      // Strip the comment text but preserve the newline: without this, a
+      // comment block immediately followed by a statement (no blank line)
+      // glues `--` residue onto the statement's first line, commenting it
+      // out and producing a syntax error on the remainder (verified
+      // 2026-09-04: ALTER in 0001 failed exactly this way).
+      if (ch === "\n") {
+        inLineComment = false;
+        current += "\n";
+      }
       continue;
     }
     if (inBlockComment) {
       if (ch === "*" && next === "/") {
         inBlockComment = false;
         i++;
+        current += " "; // keep surrounding tokens separated
       }
       continue;
     }
@@ -63,13 +72,11 @@ function splitStatements(sql: string): string[] {
     }
     if (ch === "-" && next === "-") {
       inLineComment = true;
-      current += "--";
       i++;
       continue;
     }
     if (ch === "/" && next === "*") {
       inBlockComment = true;
-      current += "/*";
       i++;
       continue;
     }
@@ -154,6 +161,16 @@ async function main() {
         process.exit(1);
       }
     }
+    // NOTE (2026-09-04): the version is recorded only after ALL statements in
+    // the file succeed. Statements that are NOT idempotent-safe — e.g.
+    // `ALTER TABLE ... ADD CONSTRAINT` (Postgres has no IF NOT EXISTS for it)
+    // — are therefore safe only because the fixed splitter cannot silently
+    // mangle statements into partial applies, and because a full re-run of an
+    // already-applied migration is skipped above via schema_migrations.
+    // Rule for future migrations: keep every statement IF NOT EXISTS-safe
+    // where the syntax allows; flag any ADD CONSTRAINT / CREATE INDEX
+    // (non-concurrent, no IF NOT EXISTS variant) in review rather than
+    // building complex guards into this runner.
     await sql`INSERT INTO schema_migrations (version) VALUES (${version})`;
     appliedCount++;
   }

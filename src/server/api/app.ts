@@ -5,7 +5,7 @@
 import { createServerFn } from "@tanstack/react-start";
 import { readSessionToken, UnauthorizedError } from "~/server/session-middleware.ts";
 import * as auth from "~/server/auth.ts";
-import { requireWorkspaceMember, listMyWorkspaces, getWorkspaceForMember } from "~/server/workspace.ts";
+import { requireWorkspaceMember, listMyWorkspaces, getWorkspaceForMember, createWorkspaceWithOwner } from "~/server/workspace.ts";
 import * as workspacesRepo from "~/server/db/repos/workspaces.ts";
 import { getResendProvider } from "~/server/resend/provider.ts";
 import { fail, ok } from "~/server/middleware.ts";
@@ -91,6 +91,19 @@ export const updateWorkspaceSettings = createServerFn({ method: "POST" })
       }
       const ws = await workspacesRepo.updateWorkspace({ workspaceId: data.workspaceId, name, slug });
       return ok(serializeRow({ ...(ws as any) }));
+    } catch (err) {
+      return fail(err);
+    }
+  });
+export const createWorkspace = createServerFn({ method: "POST" })
+  .validator((input: { name: unknown; slug: unknown }) => input)
+  .handler(async ({ data }) => {
+    try {
+      const ctx = await currentUser();
+      const name = auth.validateWorkspaceName(data.name);
+      const slug = auth.validateSlug(data.slug);
+      const ws = await createWorkspaceWithOwner({ name, slug, ownerUserId: ctx.user.id });
+      return ok({ workspace: serializeRow({ ...ws }) as any });
     } catch (err) {
       return fail(err);
     }

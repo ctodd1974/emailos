@@ -51,3 +51,21 @@ export async function getWorkspaceForMember(workspaceId: string, user: { id: str
   if (!workspace) throw new NotFoundError();
   return { member, workspace };
 }
+
+/** Next free slug: `<base>` then `<base>-2`, `<base>-3`… to keep URLs stable. */
+export async function createWorkspaceWithOwner(input: {
+  name: string;
+  slug: string;
+  ownerUserId: string;
+}): Promise<workspacesRepo.Workspace> {
+  let slug = input.slug;
+  let n = 2;
+  while (await workspacesRepo.slugExists(slug)) {
+    slug = `${input.slug}-${n++}`;
+  }
+  return workspacesRepo.createWorkspace({
+    name: input.name,
+    slug,
+    ownerUserId: input.ownerUserId,
+  });
+}

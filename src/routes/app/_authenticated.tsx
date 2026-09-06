@@ -1,6 +1,7 @@
 import { createFileRoute, Link, Outlet, redirect, useNavigate } from "@tanstack/react-router";
 import { useState } from "react";
 import { getCurrentSession, logout } from "~/server/api/auth.ts";
+import { createWorkspace } from "~/server/api/app.ts";
 
 export interface AppRouteContext {
   user: { id: string; email: string; name: string | null };
@@ -48,6 +49,42 @@ function AppShell() {
 
   function switchWorkspace(id: string) {
     navigate({ to: "/app/dashboard", search: { ws: id } });
+  }
+
+  // Create-workspace control (Slice 1 DoD): a signed-in user can own multiple
+  // workspaces; each is kept logically separate by workspace_id scoping.
+  const [creating, setCreating] = useState(false);
+  const [createError, setCreateError] = useState<string | null>(null);
+  async function handleCreateWorkspace() {
+    setCreating(true);
+    setCreateError(null);
+    try {
+      const name = prompt("Name your new workspace", "My workspace");
+      if (name === null) return; // cancelled
+      if (!name.trim()) {
+        setCreateError("Workspace name is required.");
+        return;
+      }
+      const slugFromName = name
+        .toLowerCase()
+        .trim()
+        .replace(/[^a-z0-9]+/g, "-")
+        .replace(/^-+|-+$/g, "")
+        .slice(0, 60) || "workspace";
+      const slug = prompt("Workspace slug (URL identifier)", slugFromName);
+      if (slug === null) return;
+      const res = await createWorkspace({ data: { name, slug } });
+      if (!res.ok) {
+        setCreateError(res.error.error ?? "Failed to create workspace.");
+        return;
+      }
+      navigate({ to: "/app/dashboard", search: { ws: res.data.workspace.id } });
+      window.location.reload();
+    } catch (err) {
+      setCreateError(err instanceof Error ? err.message : "Failed to create workspace.");
+    } finally {
+      setCreating(false);
+    }
   }
 
   const navItems = [
@@ -100,18 +137,28 @@ function AppShell() {
             <span className="mx-2 text-neutral-700">/</span>
             <span className="text-neutral-500">{currentWorkspace.slug}</span>
           </div>
-          <select
-            aria-label="Switch workspace"
-            className="rounded-lg border border-neutral-700 bg-neutral-800 px-3 py-1.5 text-sm text-neutral-200 outline-none focus:border-indigo-500"
-            value={currentWorkspace.id}
-            onChange={(e) => switchWorkspace(e.target.value)}
-          >
-            {workspaces.map((w) => (
-              <option key={w.id} value={w.id}>
-                {w.name}
-              </option>
-            ))}
-          </select>
+          <div className="flex items-center gap-2">
+            <select
+              aria-label="Switch workspace"
+              className="rounded-lg border border-neutral-700 bg-neutral-800 px-3 py-1.5 text-sm text-neutral-200 outline-none focus:border-indigo-500"
+              value={currentWorkspace.id}
+              onChange={(e) => switchWorkspace(e.target.value)}
+            >
+              {workspaces.map((w) => (
+                <option key={w.id} value={w.id}>
+                  {w.name}
+                </option>
+              ))}
+            </select>
+            <button
+              onClick={handleCreateWorkspace}
+              disabled={creating}
+              className="rounded-lg border border-indigo-600 bg-indigo-500/20 px-3 py-1.5 text-sm font-medium text-indigo-300 hover:bg-indigo-500/30 disabled:opacity-60"
+            >
+              {creating ? "Creating…" : "+ Create workspace"}
+            </button>
+          </div>
+          {createError ? <p className="mr-2 text-xs text-red-400">{createError}</p> : null}
         </header>
         <main className="flex-1 overflow-y-auto p-6">
           <Outlet />

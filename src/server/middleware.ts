@@ -12,6 +12,8 @@ import {
 } from "~/server/session-middleware.ts";
 import * as auth from "~/server/auth.ts";
 import type { SessionContext } from "~/server/auth.ts";
+import { ForbiddenError, NotFoundError } from "~/server/workspace.ts";
+import { ValidationError } from "~/server/audience/validation.ts";
 
 /** Attach the authenticated session context to handlers. */
 export { authMiddleware, type SessionContext };
@@ -31,6 +33,17 @@ export function serializeError(err: unknown): ApiErrorBody {
   }
   if (err instanceof UnauthorizedError) {
     return { error: err.message, status: 401 };
+  }
+  // Workspace isolation semantics (proposal §4.3): a non-member gets 403, never
+  // a generic 500. Slice 2 verifies this path over real HTTP requests.
+  if (err instanceof ForbiddenError) {
+    return { error: err.message, status: 403 };
+  }
+  if (err instanceof NotFoundError) {
+    return { error: err.message, status: 404 };
+  }
+  if (err instanceof ValidationError) {
+    return { error: err.message, status: err.status };
   }
   return { error: err instanceof Error ? err.message : "Unexpected error.", status: 500 };
 }

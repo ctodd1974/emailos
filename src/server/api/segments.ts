@@ -50,6 +50,16 @@ async function describeRules(
   });
 }
 
+/**
+ * Plain-English summary built from `describeRules`, so tag/audience rules read
+ * as names ("tagged buyer") instead of raw ids. The repo's own `explained`
+ * string is the id-level fallback and is never shown when names are available.
+ */
+function explainWithNames(matchType: string, descriptions: string[]): string {
+  const joiner = matchType === "any" ? " OR " : " AND ";
+  return `${matchType === "any" ? "Matches any" : "Matches all"} of: ${descriptions.join(joiner)}`;
+}
+
 function parseRules(input: unknown): segmentsRepo.SegmentRule[] {
   if (!Array.isArray(input) || input.length === 0) {
     throw new ValidationError("Add at least one rule.");
@@ -92,7 +102,12 @@ export const listSegments = createServerFn({ method: "GET" })
           const full = await segmentsRepo.findSegmentById(workspaceId, s!.id as string);
           if (!full) return null;
           const result = await segmentsRepo.evaluateSegment(workspaceId, full);
-          return { ...s, count: result.count, sample: result.sample, explained: result.explained };
+          return {
+            ...s,
+            count: result.count,
+            sample: result.sample,
+            explained: explainWithNames(String(s!.match_type), (s!.ruleDescriptions as string[]) ?? []),
+          };
         }),
       );
       return ok({ segments: evaluated.filter(Boolean) });
@@ -123,10 +138,11 @@ export const createSegment = createServerFn({ method: "POST" })
         return fail(err);
       }
       const evaluation = await segmentsRepo.evaluateSegment(workspaceId, segment);
+      const descriptions = await describeRules(workspaceId, rules);
       return ok({
-        segment: { ...serializeRow({ ...segment }), ruleDescriptions: await describeRules(workspaceId, rules) },
+        segment: { ...serializeRow({ ...segment }), ruleDescriptions: descriptions },
         count: evaluation.count,
-        explained: evaluation.explained,
+        explained: explainWithNames(matchType, descriptions),
       });
     } catch (err) {
       return fail(err);
@@ -142,11 +158,12 @@ export const previewSegment = createServerFn({ method: "GET" })
       const segment = await segmentsRepo.findSegmentById(workspaceId, segmentId);
       if (!segment) throw new ValidationError("Segment not found in this workspace.", 404);
       const evaluation = await segmentsRepo.evaluateSegment(workspaceId, segment);
+      const descriptions = await describeRules(workspaceId, segment.rules);
       return ok({
-        segment: { ...serializeRow({ ...segment }), ruleDescriptions: await describeRules(workspaceId, segment.rules) },
+        segment: { ...serializeRow({ ...segment }), ruleDescriptions: descriptions },
         count: evaluation.count,
         sample: evaluation.sample,
-        explained: evaluation.explained,
+        explained: explainWithNames(String(segment.match_type), descriptions),
       });
     } catch (err) {
       return fail(err);
